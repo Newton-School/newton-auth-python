@@ -68,10 +68,10 @@ class AsyncNewtonAuth:
             session_ttl_seconds=int(data.get("session_ttl_seconds", session.get("session_ttl_seconds", 86400))),
         )
 
-    def build_login_redirect(self, request, response) -> RedirectInstruction:
+    def build_login_redirect(self, request, response, redirect_uri: str | None = None) -> RedirectInstruction:
         state = secrets.token_urlsafe(24)
-        redirect_uri = self._get_current_path(request)
-        state_cookie = build_state_cookie_value(state, redirect_uri, self.config.session_signing_secret)
+        post_login_redirect = redirect_uri or self._get_current_path(request)
+        state_cookie = build_state_cookie_value(state, post_login_redirect, self.config.session_signing_secret)
         self._set_cookie(response, self.config.state_cookie_name, state_cookie, max_age=300)
         callback_url = self._build_callback_uri(request)
         login_url = append_query_params(
@@ -141,12 +141,6 @@ class AsyncNewtonAuth:
     def logout(self, request, response) -> None:
         self.clear_session(response)
 
-    def should_skip_auth(self, request) -> bool:
-        path = self._get_path(request)
-        if path == self.config.callback_path:
-            return False
-        return any(path.startswith(prefix) for prefix in self.config.excluded_path_prefixes)
-
     def _build_callback_uri(self, request) -> str:
         return "{}{}".format(self._get_origin(request).rstrip("/"), self.config.callback_path)
 
@@ -156,10 +150,6 @@ class AsyncNewtonAuth:
 
     @staticmethod
     def _get_current_path(request) -> str:
-        raise NotImplementedError
-
-    @staticmethod
-    def _get_path(request) -> str:
         raise NotImplementedError
 
     @staticmethod

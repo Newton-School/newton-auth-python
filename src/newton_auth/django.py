@@ -1,7 +1,7 @@
 from functools import wraps
 
 from django.conf import settings
-from django.http import HttpResponseBadRequest, HttpResponseForbidden, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseRedirect
 
 from newton_auth.core import NewtonAuth
 from newton_auth.errors import InvalidCallbackAssertionError, InvalidStateError
@@ -15,10 +15,6 @@ class DjangoNewtonAuth(NewtonAuth):
     @staticmethod
     def _get_current_path(request) -> str:
         return request.get_full_path()
-
-    @staticmethod
-    def _get_path(request) -> str:
-        return request.path
 
     @staticmethod
     def _get_query_param(request, name: str) -> str | None:
@@ -50,10 +46,15 @@ def get_newton_auth() -> DjangoNewtonAuth:
             callback_secret=config["CALLBACK_SECRET"],
             newton_api_base=config["NEWTON_API_BASE"],
             session_signing_secret=config.get("SESSION_SIGNING_SECRET"),
+            login_path=config.get("LOGIN_PATH", "/newton/login"),
             callback_path=config.get("CALLBACK_PATH", "/newton/callback"),
             cache_max_mb=config.get("CACHE_MAX_MB", 1),
         )
     return _AUTH_INSTANCE
+
+
+def get_unauthenticated_handler():
+    return settings.NEWTON_AUTH.get("UNAUTHENTICATED_HANDLER") or _default_unauthenticated_handler
 
 
 def get_unauthorized_handler():
@@ -66,6 +67,14 @@ class NewtonAuthMiddleware:
         self.auth = get_newton_auth()
 
     def __call__(self, request):
+        if request.path == self.auth.config.login_path:
+            next_path = request.GET.get("next") or "/"
+            if next_path == self.auth.config.login_path:
+                return HttpResponseBadRequest("invalid login redirect target")
+            response = HttpResponseRedirect("/")
+            redirect = self.auth.build_login_redirect(request, response, redirect_uri=next_path)
+            response["Location"] = redirect.location
+            return response
         if request.path != self.auth.config.callback_path:
             return self.get_response(request)
 
@@ -87,7 +96,7 @@ class NewtonAuthMiddleware:
             target.cookies[morsel.key] = morsel
 
 
-def newton_protected(view_func=None, *, unauthorized_handler=None):
+def newton_protected(view_func=None, *, unauthenticated_handler=None, unauthorized_handler=None):
     def decorator(view):
         @wraps(view)
         def wrapped(request, *args, **kwargs):
@@ -96,9 +105,7 @@ def newton_protected(view_func=None, *, unauthorized_handler=None):
             response = HttpResponseRedirect("/")
             result = auth.authenticate(request, response=response)
             if not result.authenticated:
-                redirect = auth.build_login_redirect(request, response)
-                response["Location"] = redirect.location
-                return response
+                return (unauthenticated_handler or get_unauthenticated_handler())(request, result)
             if not result.authorized:
                 return (unauthorized_handler or get_unauthorized_handler())(request, result)
 
@@ -114,3 +121,7 @@ def newton_protected(view_func=None, *, unauthorized_handler=None):
 
 def _default_unauthorized_handler(request, result):
     return HttpResponseForbidden("forbidden")
+
+
+def _default_unauthenticated_handler(request, result):
+    return HttpResponse("authentication required", status=401)

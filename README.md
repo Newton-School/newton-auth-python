@@ -17,6 +17,10 @@ MIDDLEWARE = [
 ]
 ```
 
+The middleware owns two SDK routes:
+- `/newton/login` starts the OAuth redirect flow
+- `/newton/callback` completes the callback flow
+
 Configure the SDK:
 
 ```python
@@ -25,6 +29,7 @@ NEWTON_AUTH = {
     "CLIENT_SECRET": os.environ["NEWTON_AUTH_CLIENT_SECRET"],
     "CALLBACK_SECRET": os.environ["NEWTON_AUTH_CALLBACK_SECRET"],
     "NEWTON_API_BASE": os.environ.get("NEWTON_AUTH_BASE_URL", "https://auth.newtonschool.co/api/v1"),
+    "LOGIN_PATH": "/newton/login",
     "CALLBACK_PATH": "/newton/callback",
     "CACHE_MAX_MB": 1,
 }
@@ -42,6 +47,10 @@ def protected_view(request):
     return HttpResponse("hello {}".format(request.newton_user.uid))
 ```
 
+Unauthenticated protected views return `401`. They do not redirect automatically.
+Your frontend or browser page should explicitly navigate to `/newton/login?next=/protected` when it wants to start login.
+The SDK rejects `/newton/login?next=/newton/login` to avoid redirect loops.
+
 Optional per-view unauthorized handler:
 
 ```python
@@ -57,7 +66,22 @@ def protected_view(request):
     ...
 ```
 
-The middleware only handles the callback route. Route protection is controlled by `@newton_protected`.
+Optional per-view unauthenticated handler:
+
+```python
+from django.http import JsonResponse
+
+
+def custom_unauthenticated_handler(request, auth_result):
+    return JsonResponse({"error": "login_required"}, status=401)
+
+
+@newton_protected(unauthenticated_handler=custom_unauthenticated_handler)
+def protected_view(request):
+    ...
+```
+
+The middleware only handles `/newton/login` and `/newton/callback`. Route protection is controlled by `@newton_protected`.
 
 ## FastAPI usage
 
@@ -81,6 +105,10 @@ app = FastAPI()
 app.add_middleware(NewtonAuthMiddleware, auth=auth)
 ```
 
+The middleware owns two SDK routes:
+- `/newton/login` starts the OAuth redirect flow
+- `/newton/callback` completes the callback flow
+
 Protect routes explicitly with the dependency:
 
 ```python
@@ -88,6 +116,10 @@ Protect routes explicitly with the dependency:
 async def protected_route(user=Depends(require_newton_auth(auth))):
     return {"uid": user.uid, "authorized": user.authorized}
 ```
+
+Unauthenticated protected routes return `401`. They do not redirect automatically.
+Clients should explicitly navigate the browser to `/newton/login?next=/protected` when they want to start login.
+The SDK rejects `/newton/login?next=/newton/login` to avoid redirect loops.
 
 Optional unauthorized handler:
 
@@ -106,6 +138,23 @@ async def protected_route(
     return {"uid": user.uid}
 ```
 
-The middleware only handles the callback route. Route protection is controlled by `require_newton_auth(...)`.
+Optional unauthenticated handler:
+
+```python
+from fastapi.responses import JSONResponse
+
+
+def custom_unauthenticated_handler(request, auth_result):
+    return JSONResponse({"error": "login_required"}, status_code=401)
+
+
+@app.get("/protected")
+async def protected_route(
+    user=Depends(require_newton_auth(auth, unauthenticated_handler=custom_unauthenticated_handler))
+):
+    return {"uid": user.uid}
+```
+
+The middleware only handles `/newton/login` and `/newton/callback`. Route protection is controlled by `require_newton_auth(...)`.
 
 See [sdk-final-design.md](./sdk-final-design.md) for the current design.

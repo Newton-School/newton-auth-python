@@ -16,10 +16,6 @@ class FastAPINewtonAuth(AsyncNewtonAuth):
         return request.url.path if not request.url.query else "{}?{}".format(request.url.path, request.url.query)
 
     @staticmethod
-    def _get_path(request) -> str:
-        return request.url.path
-
-    @staticmethod
     def _get_query_param(request, name: str) -> str | None:
         return request.query_params.get(name)
 
@@ -47,6 +43,14 @@ class NewtonAuthMiddleware(BaseHTTPMiddleware):
         self.auth = auth
 
     async def dispatch(self, request, call_next):
+        if request.url.path == self.auth.config.login_path:
+            next_path = request.query_params.get("next") or "/"
+            if next_path == self.auth.config.login_path:
+                return PlainTextResponse("invalid login redirect target", status_code=400)
+            response = RedirectResponse(url="/", status_code=302)
+            redirect = self.auth.build_login_redirect(request, response, redirect_uri=next_path)
+            response.headers["location"] = redirect.location
+            return response
         if request.url.path != self.auth.config.callback_path:
             try:
                 return await call_next(request)
@@ -81,14 +85,23 @@ def default_unauthorized_handler(request, auth_result):
     return PlainTextResponse("forbidden", status_code=403)
 
 
-def require_newton_auth(auth: FastAPINewtonAuth, *, unauthorized_handler=None):
+def default_unauthenticated_handler(request, auth_result):
+    accepts = request.headers.get("accept", "")
+    if "application/json" in accepts:
+        return JSONResponse({"error": "authentication_required"}, status_code=401)
+    return PlainTextResponse("authentication required", status_code=401)
+
+
+def require_newton_auth(auth: FastAPINewtonAuth, *, unauthenticated_handler=None, unauthorized_handler=None):
     async def dependency(request: Request):
         response = RedirectResponse(url="/", status_code=302)
         result = await auth.authenticate(request, response=response)
         if not result.authenticated:
-            redirect = auth.build_login_redirect(request, response)
-            response.headers["location"] = redirect.location
-            raise NewtonAuthResponse(response)
+            handler = unauthenticated_handler or default_unauthenticated_handler
+            unauthenticated_response = handler(request, result)
+            if hasattr(unauthenticated_response, "__await__"):
+                unauthenticated_response = await unauthenticated_response
+            raise NewtonAuthResponse(unauthenticated_response)
         if not result.authorized:
             handler = unauthorized_handler or default_unauthorized_handler
             unauthorized_response = handler(request, result)
