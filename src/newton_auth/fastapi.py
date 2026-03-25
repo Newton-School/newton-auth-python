@@ -1,3 +1,4 @@
+from fastapi import Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -35,58 +36,34 @@ class FastAPINewtonAuth(AsyncNewtonAuth):
         response.delete_cookie(name, path="/", samesite="Lax")
 
 
+class NewtonAuthResponse(Exception):
+    def __init__(self, response):
+        self.response = response
+
+
 class NewtonAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(
-        self,
-        app,
-        *,
-        unauthorized_handler=None,
-        **config,
-    ):
+    def __init__(self, app, *, auth: FastAPINewtonAuth):
         super().__init__(app)
-        self.auth = FastAPINewtonAuth(**config)
-        self.unauthorized_handler = unauthorized_handler or self._default_unauthorized_handler
+        self.auth = auth
 
     async def dispatch(self, request, call_next):
-        if self.auth.should_skip_auth(request):
-            return await call_next(request)
-        if request.url.path == self.auth.config.callback_path:
-            response = RedirectResponse(url="/", status_code=302)
+        if request.url.path != self.auth.config.callback_path:
             try:
-                result = self.auth.handle_callback(request, response)
-            except (InvalidStateError, InvalidCallbackAssertionError):
-                self.auth.clear_session(response)
-                error_response = PlainTextResponse("invalid auth callback", status_code=400)
-                self._copy_headers_and_cookies(response, error_response)
-                return error_response
-            response.headers["location"] = result.redirect_uri
-            request.state.newton_user = result.user
-            return response
+                return await call_next(request)
+            except NewtonAuthResponse as exc:
+                return exc.response
 
         response = RedirectResponse(url="/", status_code=302)
-        result = await self.auth.authenticate(request, response=response)
-        if not result.authenticated:
-            redirect = self.auth.build_login_redirect(request, response)
-            response.headers["location"] = redirect.location
-            return response
-        if not result.authorized:
-            return await self._call_unauthorized_handler(request, result)
-
+        try:
+            result = self.auth.handle_callback(request, response)
+        except (InvalidStateError, InvalidCallbackAssertionError):
+            self.auth.clear_session(response)
+            error_response = PlainTextResponse("invalid auth callback", status_code=400)
+            self._copy_headers_and_cookies(response, error_response)
+            return error_response
+        response.headers["location"] = result.redirect_uri
         request.state.newton_user = result.user
-        return await call_next(request)
-
-    async def _call_unauthorized_handler(self, request, result):
-        response = self.unauthorized_handler(request, result)
-        if hasattr(response, "__await__"):
-            return await response
         return response
-
-    @staticmethod
-    def _default_unauthorized_handler(request, result):
-        accepts = request.headers.get("accept", "")
-        if "application/json" in accepts:
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        return PlainTextResponse("forbidden", status_code=403)
 
     @staticmethod
     def _copy_headers_and_cookies(source, target) -> None:
@@ -95,3 +72,31 @@ class NewtonAuthMiddleware(BaseHTTPMiddleware):
             if key.lower() in {b"content-length", b"location"}:
                 continue
             target.raw_headers.append((key, value))
+
+
+def default_unauthorized_handler(request, auth_result):
+    accepts = request.headers.get("accept", "")
+    if "application/json" in accepts:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return PlainTextResponse("forbidden", status_code=403)
+
+
+def require_newton_auth(auth: FastAPINewtonAuth, *, unauthorized_handler=None):
+    async def dependency(request: Request):
+        response = RedirectResponse(url="/", status_code=302)
+        result = await auth.authenticate(request, response=response)
+        if not result.authenticated:
+            redirect = auth.build_login_redirect(request, response)
+            response.headers["location"] = redirect.location
+            raise NewtonAuthResponse(response)
+        if not result.authorized:
+            handler = unauthorized_handler or default_unauthorized_handler
+            unauthorized_response = handler(request, result)
+            if hasattr(unauthorized_response, "__await__"):
+                unauthorized_response = await unauthorized_response
+            raise NewtonAuthResponse(unauthorized_response)
+
+        request.state.newton_user = result.user
+        return result.user
+
+    return dependency

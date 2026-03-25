@@ -1,3 +1,5 @@
+from functools import wraps
+
 from django.conf import settings
 from django.http import HttpResponseBadRequest, HttpResponseForbidden, HttpResponseRedirect
 
@@ -35,11 +37,14 @@ class DjangoNewtonAuth(NewtonAuth):
         response.delete_cookie(name, path="/", samesite="Lax")
 
 
-class NewtonAuthMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
+_AUTH_INSTANCE = None
+
+
+def get_newton_auth() -> DjangoNewtonAuth:
+    global _AUTH_INSTANCE
+    if _AUTH_INSTANCE is None:
         config = settings.NEWTON_AUTH
-        self.auth = DjangoNewtonAuth(
+        _AUTH_INSTANCE = DjangoNewtonAuth(
             client_id=config["CLIENT_ID"],
             client_secret=config["CLIENT_SECRET"],
             callback_secret=config["CALLBACK_SECRET"],
@@ -47,43 +52,65 @@ class NewtonAuthMiddleware:
             session_signing_secret=config.get("SESSION_SIGNING_SECRET"),
             callback_path=config.get("CALLBACK_PATH", "/newton/callback"),
             cache_max_mb=config.get("CACHE_MAX_MB", 1),
-            excluded_path_prefixes=tuple(config.get("EXCLUDED_PATH_PREFIXES", ())),
         )
-        self.unauthorized_handler = config.get("UNAUTHORIZED_HANDLER") or self._default_unauthorized_handler
+    return _AUTH_INSTANCE
+
+
+def get_unauthorized_handler():
+    return settings.NEWTON_AUTH.get("UNAUTHORIZED_HANDLER") or _default_unauthorized_handler
+
+
+class NewtonAuthMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.auth = get_newton_auth()
 
     def __call__(self, request):
-        if self.auth.should_skip_auth(request):
+        if request.path != self.auth.config.callback_path:
             return self.get_response(request)
-        if request.path == self.auth.config.callback_path:
-            response = HttpResponseRedirect("/")
-            try:
-                result = self.auth.handle_callback(request, response)
-            except (InvalidStateError, InvalidCallbackAssertionError):
-                self.auth.clear_session(response)
-                error_response = HttpResponseBadRequest("invalid auth callback")
-                self._copy_cookies(response, error_response)
-                return error_response
-            response["Location"] = result.redirect_uri
-            request.newton_user = result.user
-            return response
 
         response = HttpResponseRedirect("/")
-        result = self.auth.authenticate(request, response=response)
-        if not result.authenticated:
-            redirect = self.auth.build_login_redirect(request, response)
-            response["Location"] = redirect.location
-            return response
-        if not result.authorized:
-            return self.unauthorized_handler(request, result)
-
+        try:
+            result = self.auth.handle_callback(request, response)
+        except (InvalidStateError, InvalidCallbackAssertionError):
+            self.auth.clear_session(response)
+            error_response = HttpResponseBadRequest("invalid auth callback")
+            self._copy_cookies(response, error_response)
+            return error_response
+        response["Location"] = result.redirect_uri
         request.newton_user = result.user
-        return self.get_response(request)
+        return response
 
     @staticmethod
     def _copy_cookies(source, target) -> None:
         for morsel in source.cookies.values():
             target.cookies[morsel.key] = morsel
 
-    @staticmethod
-    def _default_unauthorized_handler(request, result):
-        return HttpResponseForbidden("forbidden")
+
+def newton_protected(view_func=None, *, unauthorized_handler=None):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(request, *args, **kwargs):
+            auth = get_newton_auth()
+            request.newton_auth = auth
+            response = HttpResponseRedirect("/")
+            result = auth.authenticate(request, response=response)
+            if not result.authenticated:
+                redirect = auth.build_login_redirect(request, response)
+                response["Location"] = redirect.location
+                return response
+            if not result.authorized:
+                return (unauthorized_handler or get_unauthorized_handler())(request, result)
+
+            request.newton_user = result.user
+            return view(request, *args, **kwargs)
+
+        return wrapped
+
+    if view_func is None:
+        return decorator
+    return decorator(view_func)
+
+
+def _default_unauthorized_handler(request, result):
+    return HttpResponseForbidden("forbidden")
