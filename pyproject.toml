@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "newton-auth"
+version = "0.1.0"
+description = "Backend-only Newton School authentication SDK for Python applications"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "cryptography>=41.0.0",
+  "fastapi>=0.110.0",
+  "httpx>=0.27.0",
+  "requests>=2.31.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
