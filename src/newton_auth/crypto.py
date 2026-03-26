@@ -19,7 +19,7 @@ def b64url_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + padding)
 
 
-def decrypt_callback_assertion(identity: str, callback_secret: str, client_id: str) -> dict:
+def decrypt_callback_assertion(identity: str, callback_secret: str, client_id: str, expected_issuer: str) -> dict:
     if not identity:
         raise InvalidCallbackAssertionError("missing assertion")
     parts = identity.split(".")
@@ -44,7 +44,7 @@ def decrypt_callback_assertion(identity: str, callback_secret: str, client_id: s
     now_ts = int(time.time())
     if data.get("aud") != client_id:
         raise InvalidCallbackAssertionError("assertion aud mismatch")
-    if data.get("iss") != "https://auth.newtonschool.co":
+    if data.get("iss") != expected_issuer:
         raise InvalidCallbackAssertionError("assertion issuer mismatch")
     if now_ts > int(data.get("exp", 0)):
         raise InvalidCallbackAssertionError("assertion expired")

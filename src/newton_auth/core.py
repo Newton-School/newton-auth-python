@@ -12,7 +12,7 @@ from newton_auth.crypto import decrypt_callback_assertion
 from newton_auth.errors import InvalidCallbackAssertionError, InvalidSessionError, InvalidStateError
 from newton_auth.http import NewtonAuthHTTPClient
 from newton_auth.models import AuthResult, CallbackResult, NewtonUser, RedirectInstruction
-from newton_auth.utils import append_query_params
+from newton_auth.utils import append_query_params, derive_issuer_from_base_url
 
 
 class NewtonAuth:
@@ -97,7 +97,12 @@ class NewtonAuth:
             self._delete_cookie(response, self.config.state_cookie_name)
             raise InvalidStateError("state mismatch")
         try:
-            assertion = decrypt_callback_assertion(identity, self.config.callback_secret, self.config.client_id)
+            assertion = decrypt_callback_assertion(
+                identity,
+                self.config.callback_secret,
+                self.config.client_id,
+                derive_issuer_from_base_url(self.config.newton_api_base),
+            )
         except InvalidCallbackAssertionError:
             self._delete_cookie(response, self.config.state_cookie_name)
             raise
