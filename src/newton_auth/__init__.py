@@ -2,23 +2,23 @@ from newton_auth.config import NewtonAuthConfig
 from newton_auth.models import AuthResult, CallbackResult, NewtonUser, RedirectInstruction
 
 __all__ = [
+    "AsyncNewtonAuth",
     "AuthResult",
     "CallbackResult",
+    "NewtonAuth",
     "NewtonAuthConfig",
     "NewtonUser",
     "RedirectInstruction",
 ]
 
-try:
-    from newton_auth.core import NewtonAuth
 
-    __all__ += ["NewtonAuth"]
-except ImportError:
-    pass
+def __getattr__(name: str):
+    if name == "NewtonAuth":
+        from newton_auth.core import NewtonAuth
 
-try:
-    from newton_auth.async_core import AsyncNewtonAuth
+        return NewtonAuth
+    if name == "AsyncNewtonAuth":
+        from newton_auth.async_core import AsyncNewtonAuth
 
-    __all__ += ["AsyncNewtonAuth"]
-except ImportError:
-    pass
+        return AsyncNewtonAuth
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

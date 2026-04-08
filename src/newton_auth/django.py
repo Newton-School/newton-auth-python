@@ -49,6 +49,7 @@ def get_newton_auth() -> DjangoNewtonAuth:
             login_path=config.get("LOGIN_PATH", "/newton/login"),
             callback_path=config.get("CALLBACK_PATH", "/newton/callback"),
             cache_max_mb=config.get("CACHE_MAX_MB", 1),
+            auth_timeout=config.get("AUTH_TIMEOUT", 10.0),
         )
     return _AUTH_INSTANCE
 

@@ -32,6 +32,7 @@ NEWTON_AUTH = {
     "LOGIN_PATH": "/newton/login",
     "CALLBACK_PATH": "/newton/callback",
     "CACHE_MAX_MB": 1,
+    "AUTH_TIMEOUT": 10.0,
 }
 ```
 
@@ -99,10 +100,16 @@ auth = FastAPINewtonAuth(
     newton_api_base=os.environ.get("NEWTON_AUTH_BASE_URL", "https://auth.newtonschool.co/api/v1"),
     callback_path="/newton/callback",
     cache_max_mb=1,
+    auth_timeout=10.0,
 )
 
 app = FastAPI()
 app.add_middleware(NewtonAuthMiddleware, auth=auth)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await auth.aclose()
 ```
 
 The middleware owns two SDK routes:
