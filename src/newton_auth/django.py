@@ -62,6 +62,11 @@ def get_unauthorized_handler():
     return settings.NEWTON_AUTH.get("UNAUTHORIZED_HANDLER") or _default_unauthorized_handler
 
 
+def _copy_cookies(source, target) -> None:
+    for morsel in source.cookies.values():
+        target.cookies[morsel.key] = morsel
+
+
 class NewtonAuthMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -85,16 +90,11 @@ class NewtonAuthMiddleware:
         except (InvalidStateError, InvalidCallbackAssertionError):
             self.auth.clear_session(response)
             error_response = HttpResponseBadRequest("invalid auth callback")
-            self._copy_cookies(response, error_response)
+            _copy_cookies(response, error_response)
             return error_response
         response["Location"] = result.redirect_uri
         request.newton_user = result.user
         return response
-
-    @staticmethod
-    def _copy_cookies(source, target) -> None:
-        for morsel in source.cookies.values():
-            target.cookies[morsel.key] = morsel
 
 
 def newton_protected(view_func=None, *, unauthenticated_handler=None, unauthorized_handler=None):
@@ -106,9 +106,15 @@ def newton_protected(view_func=None, *, unauthenticated_handler=None, unauthoriz
             response = HttpResponseRedirect("/")
             result = auth.authenticate(request, response=response)
             if not result.authenticated:
-                return (unauthenticated_handler or get_unauthenticated_handler())(request, result)
+                handler_response = (unauthenticated_handler or get_unauthenticated_handler())(request, result)
+                if result.should_clear_session:
+                    _copy_cookies(response, handler_response)
+                return handler_response
             if not result.authorized:
-                return (unauthorized_handler or get_unauthorized_handler())(request, result)
+                handler_response = (unauthorized_handler or get_unauthorized_handler())(request, result)
+                if result.should_clear_session:
+                    _copy_cookies(response, handler_response)
+                return handler_response
 
             request.newton_user = result.user
             return view(request, *args, **kwargs)

@@ -37,6 +37,14 @@ class NewtonAuthResponse(Exception):
         self.response = response
 
 
+def _copy_headers_and_cookies(source, target) -> None:
+    raw_headers = getattr(source.headers, "raw", [])
+    for key, value in raw_headers:
+        if key.lower() in {b"content-length", b"location"}:
+            continue
+        target.raw_headers.append((key, value))
+
+
 class NewtonAuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, *, auth: FastAPINewtonAuth):
         super().__init__(app)
@@ -63,19 +71,11 @@ class NewtonAuthMiddleware(BaseHTTPMiddleware):
         except (InvalidStateError, InvalidCallbackAssertionError):
             self.auth.clear_session(response)
             error_response = PlainTextResponse("invalid auth callback", status_code=400)
-            self._copy_headers_and_cookies(response, error_response)
+            _copy_headers_and_cookies(response, error_response)
             return error_response
         response.headers["location"] = result.redirect_uri
         request.state.newton_user = result.user
         return response
-
-    @staticmethod
-    def _copy_headers_and_cookies(source, target) -> None:
-        raw_headers = getattr(source.headers, "raw", [])
-        for key, value in raw_headers:
-            if key.lower() in {b"content-length", b"location"}:
-                continue
-            target.raw_headers.append((key, value))
 
 
 def default_unauthorized_handler(request, auth_result):
@@ -101,12 +101,16 @@ def require_newton_auth(auth: FastAPINewtonAuth, *, unauthenticated_handler=None
             unauthenticated_response = handler(request, result)
             if hasattr(unauthenticated_response, "__await__"):
                 unauthenticated_response = await unauthenticated_response
+            if result.should_clear_session:
+                _copy_headers_and_cookies(response, unauthenticated_response)
             raise NewtonAuthResponse(unauthenticated_response)
         if not result.authorized:
             handler = unauthorized_handler or default_unauthorized_handler
             unauthorized_response = handler(request, result)
             if hasattr(unauthorized_response, "__await__"):
                 unauthorized_response = await unauthorized_response
+            if result.should_clear_session:
+                _copy_headers_and_cookies(response, unauthorized_response)
             raise NewtonAuthResponse(unauthorized_response)
 
         request.state.newton_user = result.user

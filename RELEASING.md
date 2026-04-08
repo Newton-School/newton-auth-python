@@ -10,34 +10,41 @@ Consumers should install pinned tags such as `v0.1.0`.
 1. Update `pyproject.toml` with the next semantic version.
 2. Update `CHANGELOG.md`:
    move release notes from `Unreleased` into a new versioned section.
-3. Verify packaging locally:
+3. Run the test suite:
+
+```bash
+pip install -e ".[dev]"
+python -m pytest
+```
+
+4. Verify packaging locally:
 
 ```bash
 python -m build
 ```
 
-4. Verify code quality locally:
+5. Verify code quality locally:
 
 ```bash
 ruff check .
 ruff format --check .
 ```
 
-5. Commit the release changes.
-6. Create an annotated tag:
+6. Commit the release changes.
+7. Create an annotated tag:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z"
 ```
 
-7. Push the branch and tag:
+8. Push the branch and tag:
 
 ```bash
 git push origin master
 git push origin vX.Y.Z
 ```
 
-8. Create a GitHub Release for the tag and summarize:
+9. Create a GitHub Release for the tag and summarize:
    - user-facing changes
    - breaking changes, if any
    - migration notes, if any
