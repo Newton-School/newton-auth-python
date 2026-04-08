@@ -17,8 +17,8 @@ class BoundedLRUCache:
             entry = self._cache.get(key)
             if not entry:
                 return None
-            ttl = entry.get("client_cache_ttl_seconds", 0)
-            if ttl and time.time() - entry["_cached_at"] > ttl:
+            ttl = entry.get("client_cache_ttl_seconds")
+            if ttl is not None and (ttl == 0 or time.time() - entry["_cached_at"] > ttl):
                 del self._cache[key]
                 return None
             self._cache.move_to_end(key)
@@ -37,4 +37,3 @@ class BoundedLRUCache:
 
     def _approx_size(self):
         return sum(sys.getsizeof(v) + self.ENTRY_OVERHEAD for v in self._cache.values())
-

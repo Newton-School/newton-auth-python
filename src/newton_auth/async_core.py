@@ -24,6 +24,7 @@ class AsyncNewtonAuth:
             base_url=self.config.newton_api_base,
             client_id=self.config.client_id,
             client_secret=self.config.client_secret,
+            auth_timeout=self.config.auth_timeout,
         )
         self.cache = BoundedLRUCache(max_mb=self.config.cache_max_mb)
 
@@ -145,6 +146,9 @@ class AsyncNewtonAuth:
 
     def logout(self, request, response) -> None:
         self.clear_session(response)
+
+    async def aclose(self) -> None:
+        await self.http.aclose()
 
     def _build_callback_uri(self, request) -> str:
         return "{}{}".format(self._get_origin(request).rstrip("/"), self.config.callback_path)

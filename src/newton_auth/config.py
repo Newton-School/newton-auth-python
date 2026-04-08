@@ -13,3 +13,4 @@ class NewtonAuthConfig:
     session_cookie_name: str = "newton_session"
     state_cookie_name: str = "newton_state"
     cache_max_mb: int = 1
+    auth_timeout: float = 10.0

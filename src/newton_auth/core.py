@@ -24,6 +24,7 @@ class NewtonAuth:
             base_url=self.config.newton_api_base,
             client_id=self.config.client_id,
             client_secret=self.config.client_secret,
+            auth_timeout=self.config.auth_timeout,
         )
         self.cache = BoundedLRUCache(max_mb=self.config.cache_max_mb)
 
