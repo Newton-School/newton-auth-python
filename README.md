@@ -2,9 +2,45 @@
 
 Backend-only Newton School authentication SDK for Python applications.
 
+## Installation
+
+Install from a Git tag so consumers get an immutable version instead of a moving branch head.
+
+Django:
+
+```bash
+pip install "newton-auth[django] @ git+https://github.com/Newton-School/newton-auth-python.git@v0.1.0"
+```
+
+FastAPI:
+
+```bash
+pip install "newton-auth[fastapi] @ git+https://github.com/Newton-School/newton-auth-python.git@v0.1.0"
+```
+
+For local development:
+
+```bash
+pip install -e ".[dev]"
+```
+
 Current framework support:
 - Django
 - FastAPI
+
+## Compatibility
+
+The library currently targets:
+- Python `>=3.10`
+- Django integrations via the `django` extra
+- FastAPI integrations via the `fastapi` extra
+
+Dependency ownership is split by extra:
+- Base package: `cryptography`
+- `django` extra: `requests`
+- `fastapi` extra: `fastapi`, `httpx`
+
+Consumers should install only the extra they use.
 
 ## Django usage
 
@@ -163,5 +199,22 @@ async def protected_route(
 ```
 
 The middleware only handles `/newton/login` and `/newton/callback`. Route protection is controlled by `require_newton_auth(...)`.
+
+## Versioning And Releases
+
+This repository uses semantic versioning.
+
+- Patch releases are for fixes and non-breaking internal changes.
+- Minor releases are for backwards-compatible features or config additions.
+- Major releases are for breaking API or behavior changes.
+
+Consumers should pin to a Git tag, not a branch name.
+Each release should have:
+- a version bump in `pyproject.toml`
+- a matching Git tag like `v0.1.1`
+- a GitHub Release
+- a `CHANGELOG.md` entry
+
+See [RELEASING.md](./RELEASING.md) for the release checklist and [CHANGELOG.md](./CHANGELOG.md) for version history.
 
 See [sdk-final-design.md](./sdk-final-design.md) for the current design.
