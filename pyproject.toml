@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "newton-auth"
-version = "0.1.2"
+version = "0.1.3"
 description = "Backend-only Newton School authentication SDK for Python applications"
 readme = "README.md"
 requires-python = ">=3.10"
