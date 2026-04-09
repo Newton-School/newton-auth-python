@@ -139,13 +139,17 @@ auth = FastAPINewtonAuth(
     auth_timeout=10.0,
 )
 
-app = FastAPI()
-app.add_middleware(NewtonAuthMiddleware, auth=auth)
+from contextlib import asynccontextmanager
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
+@asynccontextmanager
+async def lifespan(app):
+    yield
     await auth.aclose()
+
+
+app = FastAPI(lifespan=lifespan)
+app.add_middleware(NewtonAuthMiddleware, auth=auth)
 ```
 
 The middleware owns two SDK routes:
@@ -216,5 +220,3 @@ Each release should have:
 - a `CHANGELOG.md` entry
 
 See [RELEASING.md](./RELEASING.md) for the release checklist and [CHANGELOG.md](./CHANGELOG.md) for version history.
-
-See [sdk-final-design.md](./sdk-final-design.md) for the current design.

@@ -147,6 +147,9 @@ class NewtonAuth:
     def logout(self, request, response) -> None:
         self.clear_session(response)
 
+    def close(self) -> None:
+        self.http.close()
+
     def _build_callback_uri(self, request) -> str:
         return "{}{}".format(self._get_origin(request).rstrip("/"), self.config.callback_path)
 
