@@ -7,11 +7,12 @@ class NewtonAuthHTTPClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.auth_timeout = auth_timeout
+        self._session = requests.Session()
+        self._session.auth = (self.client_id, self.client_secret)
 
     def auth_check(self, uid: str, platform_token: str) -> dict:
-        response = requests.post(
+        response = self._session.post(
             "{}/platform-auth/auth/check/".format(self.base_url),
-            auth=(self.client_id, self.client_secret),
             json={"uid": uid, "platform_token": platform_token},
             timeout=self.auth_timeout,
         )
@@ -26,3 +27,6 @@ class NewtonAuthHTTPClient:
             }
         response.raise_for_status()
         return response.json()
+
+    def close(self) -> None:
+        self._session.close()
