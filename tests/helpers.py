@@ -32,6 +32,9 @@ def build_callback_assertion(
     callback_secret: str = CALLBACK_SECRET,
     issuer: str = ISSUER,
     exp_offset: int = 300,
+    first_name: str = "",
+    last_name: str = "",
+    email: str = "",
 ) -> str:
     """Build a valid v1 callback assertion as Newton API would produce it."""
     now = int(time.time())
@@ -42,6 +45,9 @@ def build_callback_assertion(
         "authenticated": authenticated,
         "session_ttl_seconds": session_ttl_seconds,
         "client_cache_ttl_seconds": client_cache_ttl_seconds,
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
         "aud": client_id,
         "iss": issuer,
         "iat": now,
@@ -61,6 +67,7 @@ def build_valid_session_cookie(
     authorized: bool = True,
     session_ttl_seconds: int = 86400,
     secret: str = SESSION_SIGNING_SECRET,
+    client_id: str = CLIENT_ID,
 ) -> str:
     return build_session_cookie_value(
         uid=uid,
@@ -68,14 +75,24 @@ def build_valid_session_cookie(
         authorized=authorized,
         session_ttl_seconds=session_ttl_seconds,
         secret=secret,
+        client_id=client_id,
     )
 
 
-def auth_check_ok(uid: str = "user-123", authorized: bool = True) -> dict:
+def auth_check_ok(
+    uid: str = "user-123",
+    authorized: bool = True,
+    first_name: str = "",
+    last_name: str = "",
+    email: str = "",
+) -> dict:
     return {
         "authenticated": True,
         "authorized": authorized,
         "uid": uid,
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
         "client_cache_ttl_seconds": 60,
         "session_ttl_seconds": 86400,
         "should_clear_session": False,
@@ -87,6 +104,9 @@ def auth_check_revoked(uid: str = "user-123") -> dict:
         "authenticated": False,
         "authorized": False,
         "uid": uid,
+        "first_name": "",
+        "last_name": "",
+        "email": "",
         "client_cache_ttl_seconds": 60,
         "session_ttl_seconds": 86400,
         "should_clear_session": True,
