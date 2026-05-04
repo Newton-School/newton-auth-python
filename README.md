@@ -9,13 +9,13 @@ Install from a Git tag so consumers get an immutable version instead of a moving
 Django:
 
 ```bash
-pip install "newton-auth[django] @ git+https://github.com/Newton-School/newton-auth-python.git@v0.1.0"
+pip install "newton-auth[django] @ git+https://github.com/Newton-School/newton-auth-python.git@v0.2.0"
 ```
 
 FastAPI:
 
 ```bash
-pip install "newton-auth[fastapi] @ git+https://github.com/Newton-School/newton-auth-python.git@v0.1.0"
+pip install "newton-auth[fastapi] @ git+https://github.com/Newton-School/newton-auth-python.git@v0.2.0"
 ```
 
 For local development:
@@ -81,8 +81,17 @@ from newton_auth.django import newton_protected
 
 @newton_protected
 def protected_view(request):
-    return HttpResponse("hello {}".format(request.newton_user.uid))
+    user = request.newton_user
+    return HttpResponse("hello {} {} ({})".format(user.first_name, user.last_name, user.email))
 ```
+
+`request.newton_user` is a `NewtonUser` with these fields:
+
+- `uid` — opaque user identifier
+- `authorized` — boolean, whether the user is authorized for this app
+- `first_name`, `last_name`, `email` — strings (empty `""` if unset on the Newton profile, never `None`)
+
+Profile fields refresh every `client_cache_ttl_seconds` (default 60s) via the auth-check call to newton-api. Treat them as eventually-consistent, not live: an email change on the Newton side propagates within one cache TTL window, not immediately.
 
 Unauthenticated protected views return `401`. They do not redirect automatically.
 Your frontend or browser page should explicitly navigate to `/newton/login?next=/protected` when it wants to start login.
@@ -161,8 +170,16 @@ Protect routes explicitly with the dependency:
 ```python
 @app.get("/protected")
 async def protected_route(user=Depends(require_newton_auth(auth))):
-    return {"uid": user.uid, "authorized": user.authorized}
+    return {
+        "uid": user.uid,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "authorized": user.authorized,
+    }
 ```
+
+`user` is a `NewtonUser` with the same fields as the Django integration: `uid`, `authorized`, `first_name`, `last_name`, `email`. Profile fields refresh every `client_cache_ttl_seconds` (default 60s) — see the Django section above.
 
 Unauthenticated protected routes return `401`. They do not redirect automatically.
 Clients should explicitly navigate the browser to `/newton/login?next=/protected` when they want to start login.
@@ -216,7 +233,6 @@ Consumers should pin to a Git tag, not a branch name.
 Each release should have:
 - a version bump in `pyproject.toml`
 - a matching Git tag like `v0.1.1`
-- a GitHub Release
-- a `CHANGELOG.md` entry
+- a GitHub Release with the change notes
 
-See [RELEASING.md](./RELEASING.md) for the release checklist and [CHANGELOG.md](./CHANGELOG.md) for version history.
+See [RELEASING.md](./RELEASING.md) for the release checklist. Version history lives on the [GitHub Releases page](https://github.com/Newton-School/newton-auth-python/releases).
