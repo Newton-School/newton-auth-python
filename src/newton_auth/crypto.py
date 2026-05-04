@@ -1,4 +1,5 @@
 import base64
+import functools
 import hashlib
 import hmac
 import json
@@ -9,6 +10,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from newton_auth.errors import InvalidCallbackAssertionError, InvalidSessionError
 
+SESSION_WIRE_VERSION = "v2"
+
 
 def b64url_encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).decode().rstrip("=")
@@ -17,6 +20,11 @@ def b64url_encode(value: bytes) -> str:
 def b64url_decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode(value + padding)
+
+
+@functools.lru_cache(maxsize=64)
+def _aesgcm_for(secret: str) -> AESGCM:
+    return AESGCM(hashlib.sha256(secret.encode()).digest())
 
 
 def decrypt_callback_assertion(identity: str, callback_secret: str, client_id: str, expected_issuer: str) -> dict:
@@ -35,9 +43,8 @@ def decrypt_callback_assertion(identity: str, callback_secret: str, client_id: s
         raise InvalidCallbackAssertionError("invalid assertion aad") from exc
     if aad_text != client_id:
         raise InvalidCallbackAssertionError("assertion audience mismatch")
-    key = hashlib.sha256(callback_secret.encode()).digest()
     try:
-        plaintext = AESGCM(key).decrypt(nonce, ciphertext, aad)
+        plaintext = _aesgcm_for(callback_secret).decrypt(nonce, ciphertext, aad)
     except Exception as exc:
         raise InvalidCallbackAssertionError("assertion decryption failed") from exc
     data = json.loads(plaintext)
@@ -86,3 +93,36 @@ def build_session_cookie_payload(
         "issued_at": int(time.time()),
         "nonce": b64url_encode(os.urandom(16)),
     }
+
+
+def encrypt_value(payload: dict, secret: str, aad: bytes = b"") -> str:
+    payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    nonce = os.urandom(12)
+    ciphertext = _aesgcm_for(secret).encrypt(nonce, payload_bytes, aad)
+    return "{}.{}.{}".format(
+        SESSION_WIRE_VERSION,
+        b64url_encode(nonce),
+        b64url_encode(ciphertext),
+    )
+
+
+def decrypt_value(value: str, secret: str, aad: bytes = b"") -> dict:
+    if not value:
+        raise InvalidSessionError("missing encrypted value")
+    parts = value.split(".")
+    if len(parts) != 3 or parts[0] != SESSION_WIRE_VERSION:
+        raise InvalidSessionError("invalid encrypted value wire format")
+    _, nonce_value, ciphertext_value = parts
+    try:
+        nonce = b64url_decode(nonce_value)
+        ciphertext = b64url_decode(ciphertext_value)
+    except Exception as exc:
+        raise InvalidSessionError("invalid encrypted value encoding") from exc
+    try:
+        plaintext = _aesgcm_for(secret).decrypt(nonce, ciphertext, aad)
+    except Exception as exc:
+        raise InvalidSessionError("decryption failed") from exc
+    try:
+        return json.loads(plaintext)
+    except Exception as exc:
+        raise InvalidSessionError("invalid payload") from exc

@@ -31,7 +31,11 @@ class AsyncNewtonAuth:
     async def authenticate(self, request, response=None) -> AuthResult:
         cookie_value = self._get_cookie(request, self.config.session_cookie_name)
         try:
-            session = parse_session_cookie_value(cookie_value, self.config.session_signing_secret)
+            session = parse_session_cookie_value(
+                cookie_value,
+                self.config.session_signing_secret,
+                self.config.client_id,
+            )
         except InvalidSessionError:
             if response is not None:
                 self.clear_session(response)
@@ -44,7 +48,15 @@ class AsyncNewtonAuth:
                 authenticated=cached["authenticated"],
                 authorized=cached["authorized"],
                 should_clear_session=False,
-                user=NewtonUser(uid=uid, authorized=cached["authorized"]) if cached["authenticated"] else None,
+                user=NewtonUser(
+                    uid=uid,
+                    authorized=cached["authorized"],
+                    first_name=cached.get("first_name", ""),
+                    last_name=cached.get("last_name", ""),
+                    email=cached.get("email", ""),
+                )
+                if cached["authenticated"]
+                else None,
                 client_cache_ttl_seconds=cached.get("client_cache_ttl_seconds"),
                 session_ttl_seconds=session.get("session_ttl_seconds"),
             )
@@ -57,6 +69,9 @@ class AsyncNewtonAuth:
             {
                 "authenticated": bool(data.get("authenticated")),
                 "authorized": bool(data.get("authorized")),
+                "first_name": data.get("first_name", ""),
+                "last_name": data.get("last_name", ""),
+                "email": data.get("email", ""),
                 "client_cache_ttl_seconds": int(data.get("client_cache_ttl_seconds", 60)),
             },
         )
@@ -64,7 +79,15 @@ class AsyncNewtonAuth:
             authenticated=bool(data.get("authenticated")),
             authorized=bool(data.get("authorized")),
             should_clear_session=bool(data.get("should_clear_session")),
-            user=NewtonUser(uid=uid, authorized=bool(data.get("authorized"))) if data.get("authenticated") else None,
+            user=NewtonUser(
+                uid=uid,
+                authorized=bool(data.get("authorized")),
+                first_name=data.get("first_name", ""),
+                last_name=data.get("last_name", ""),
+                email=data.get("email", ""),
+            )
+            if data.get("authenticated")
+            else None,
             client_cache_ttl_seconds=int(data.get("client_cache_ttl_seconds", 60)),
             session_ttl_seconds=int(data.get("session_ttl_seconds", session.get("session_ttl_seconds", 86400))),
         )
@@ -111,12 +134,17 @@ class AsyncNewtonAuth:
             self._delete_cookie(response, self.config.state_cookie_name)
             raise InvalidCallbackAssertionError("assertion missing required fields")
 
+        first_name = assertion.get("first_name", "")
+        last_name = assertion.get("last_name", "")
+        email = assertion.get("email", "")
+
         session_cookie_value = build_session_cookie_value(
             uid=assertion["sub"],
             platform_token=assertion["platform_token"],
             authorized=bool(assertion["authorized"]),
             session_ttl_seconds=int(assertion["session_ttl_seconds"]),
             secret=self.config.session_signing_secret,
+            client_id=self.config.client_id,
         )
         self._set_cookie(
             response,
@@ -130,12 +158,21 @@ class AsyncNewtonAuth:
             {
                 "authenticated": bool(assertion["authenticated"]),
                 "authorized": bool(assertion["authorized"]),
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
                 "client_cache_ttl_seconds": int(assertion["client_cache_ttl_seconds"]),
             },
         )
         return CallbackResult(
             redirect_uri=state_data["redirect_uri"],
-            user=NewtonUser(uid=assertion["sub"], authorized=bool(assertion["authorized"])),
+            user=NewtonUser(
+                uid=assertion["sub"],
+                authorized=bool(assertion["authorized"]),
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+            ),
             client_cache_ttl_seconds=int(assertion["client_cache_ttl_seconds"]),
             session_ttl_seconds=int(assertion["session_ttl_seconds"]),
         )

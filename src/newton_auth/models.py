@@ -5,6 +5,9 @@ from dataclasses import dataclass
 class NewtonUser:
     uid: str
     authorized: bool
+    first_name: str = ""
+    last_name: str = ""
+    email: str = ""
 
 
 @dataclass
@@ -28,4 +31,3 @@ class CallbackResult:
     user: NewtonUser
     client_cache_ttl_seconds: int
     session_ttl_seconds: int
-
