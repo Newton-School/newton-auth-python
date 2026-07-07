@@ -191,3 +191,56 @@ def test_newton_protected_403_no_spurious_cookie_deletion():
 
     assert response.status_code == 403
     assert "newton_session" not in response.cookies
+
+
+def test_newton_protected_authenticated_only_allows_unauthorized_user():
+    """authenticated_only=True lets an authenticated-but-unauthorized user through."""
+    from newton_auth.models import NewtonUser
+
+    request = _make_request()
+
+    mock_auth = MagicMock(spec=DjangoNewtonAuth)
+    mock_auth.config = MagicMock()
+    mock_auth.config.session_cookie_name = "newton_session"
+    mock_auth.config.state_cookie_name = "newton_state"
+    mock_auth.authenticate.return_value = AuthResult(
+        authenticated=True,
+        authorized=False,
+        should_clear_session=False,
+        user=NewtonUser(uid="user-123", authorized=False),
+    )
+
+    with patch("newton_auth.django.get_newton_auth", return_value=mock_auth):
+
+        @newton_protected(authenticated_only=True)
+        def view(request):
+            return HttpResponse("ok", status=200)
+
+        response = view(request)
+
+    assert response.status_code == 200
+    assert response.content == b"ok"
+
+
+def test_newton_protected_authenticated_only_still_rejects_unauthenticated():
+    """authenticated_only=True does not weaken the authentication requirement."""
+    request = _make_request()
+    mock_auth = MagicMock(spec=DjangoNewtonAuth)
+    mock_auth.config = MagicMock()
+    mock_auth.config.session_cookie_name = "newton_session"
+    mock_auth.config.state_cookie_name = "newton_state"
+    mock_auth.authenticate.return_value = AuthResult(
+        authenticated=False,
+        authorized=False,
+        should_clear_session=False,
+    )
+
+    with patch("newton_auth.django.get_newton_auth", return_value=mock_auth):
+
+        @newton_protected(authenticated_only=True)
+        def view(request):
+            return HttpResponse("should not run")
+
+        response = view(request)
+
+    assert response.status_code == 401
