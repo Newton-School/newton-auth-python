@@ -142,6 +142,64 @@ async def test_require_newton_auth_passes_through_on_valid_session():
 
 
 @pytest.mark.anyio
+async def test_require_newton_auth_authenticated_only_allows_unauthorized_user():
+    """authenticated_only=True lets an authenticated-but-unauthorized user reach the route."""
+    mock_auth = MagicMock(spec=FastAPINewtonAuth)
+    mock_auth.config = MagicMock()
+    mock_auth.config.session_cookie_name = "newton_session"
+    mock_auth.config.state_cookie_name = "newton_state"
+
+    async def _fake_authenticate(request, response=None):
+        return AuthResult(
+            authenticated=True,
+            authorized=False,
+            should_clear_session=False,
+            user=NewtonUser(uid="user-abc", authorized=False),
+        )
+
+    mock_auth.authenticate = _fake_authenticate
+
+    app = FastAPI()
+    app.add_middleware(NewtonAuthMiddleware, auth=mock_auth)
+
+    @app.get("/protected")
+    async def protected(user=Depends(require_newton_auth(mock_auth, authenticated_only=True))):
+        return {"uid": user.uid, "authorized": user.authorized}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/protected", cookies={"newton_session": "valid"})
+
+    assert response.status_code == 200
+    assert response.json() == {"uid": "user-abc", "authorized": False}
+
+
+@pytest.mark.anyio
+async def test_require_newton_auth_authenticated_only_still_rejects_unauthenticated():
+    """authenticated_only=True does not weaken the authentication requirement."""
+    mock_auth = MagicMock(spec=FastAPINewtonAuth)
+    mock_auth.config = MagicMock()
+    mock_auth.config.session_cookie_name = "newton_session"
+    mock_auth.config.state_cookie_name = "newton_state"
+
+    async def _fake_authenticate(request, response=None):
+        return AuthResult(authenticated=False, authorized=False, should_clear_session=False)
+
+    mock_auth.authenticate = _fake_authenticate
+
+    app = FastAPI()
+    app.add_middleware(NewtonAuthMiddleware, auth=mock_auth)
+
+    @app.get("/protected")
+    async def protected(user=Depends(require_newton_auth(mock_auth, authenticated_only=True))):
+        return {"uid": user.uid}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/protected")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
 async def test_require_newton_auth_cookie_deletion_forwarded_with_custom_handler():
     """Cookie deletions must reach the browser even when a custom unauthenticated handler is used."""
     from fastapi.responses import JSONResponse

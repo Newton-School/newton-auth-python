@@ -97,7 +97,13 @@ class NewtonAuthMiddleware:
         return response
 
 
-def newton_protected(view_func=None, *, unauthenticated_handler=None, unauthorized_handler=None):
+def newton_protected(
+    view_func=None,
+    *,
+    unauthenticated_handler=None,
+    unauthorized_handler=None,
+    authenticated_only=False,
+):
     def decorator(view):
         @wraps(view)
         def wrapped(request, *args, **kwargs):
@@ -110,7 +116,7 @@ def newton_protected(view_func=None, *, unauthenticated_handler=None, unauthoriz
                 if result.should_clear_session:
                     _copy_cookies(response, handler_response)
                 return handler_response
-            if not result.authorized:
+            if not result.authorized and not authenticated_only:
                 handler_response = (unauthorized_handler or get_unauthorized_handler())(request, result)
                 if result.should_clear_session:
                     _copy_cookies(response, handler_response)

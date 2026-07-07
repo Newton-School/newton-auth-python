@@ -92,7 +92,13 @@ def default_unauthenticated_handler(request, auth_result):
     return PlainTextResponse("authentication required", status_code=401)
 
 
-def require_newton_auth(auth: FastAPINewtonAuth, *, unauthenticated_handler=None, unauthorized_handler=None):
+def require_newton_auth(
+    auth: FastAPINewtonAuth,
+    *,
+    unauthenticated_handler=None,
+    unauthorized_handler=None,
+    authenticated_only=False,
+):
     async def dependency(request: Request):
         response = RedirectResponse(url="/", status_code=302)
         result = await auth.authenticate(request, response=response)
@@ -104,7 +110,7 @@ def require_newton_auth(auth: FastAPINewtonAuth, *, unauthenticated_handler=None
             if result.should_clear_session:
                 _copy_headers_and_cookies(response, unauthenticated_response)
             raise NewtonAuthResponse(unauthenticated_response)
-        if not result.authorized:
+        if not result.authorized and not authenticated_only:
             handler = unauthorized_handler or default_unauthorized_handler
             unauthorized_response = handler(request, result)
             if hasattr(unauthorized_response, "__await__"):

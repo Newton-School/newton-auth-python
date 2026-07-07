@@ -112,6 +112,18 @@ def protected_view(request):
     ...
 ```
 
+Authentication-only mode — if your app manages its own authorization and only
+needs Newton to identify the user, pass `authenticated_only=True` so an
+authenticated-but-unauthorized user is let through (unauthenticated users are
+still rejected). Pairs with binding the Newton OAuth app without a
+`required_permission`.
+
+```python
+@newton_protected(authenticated_only=True)
+def protected_view(request):
+    ...
+```
+
 Optional per-view unauthenticated handler:
 
 ```python
@@ -198,6 +210,19 @@ def custom_unauthorized_handler(request, auth_result):
 @app.get("/protected")
 async def protected_route(
     user=Depends(require_newton_auth(auth, unauthorized_handler=custom_unauthorized_handler))
+):
+    return {"uid": user.uid}
+```
+
+Authentication-only mode — pass `authenticated_only=True` to let an
+authenticated-but-unauthorized user through (unauthenticated users are still
+rejected). Pairs with binding the Newton OAuth app without a
+`required_permission`.
+
+```python
+@app.get("/protected")
+async def protected_route(
+    user=Depends(require_newton_auth(auth, authenticated_only=True))
 ):
     return {"uid": user.uid}
 ```
