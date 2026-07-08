@@ -138,6 +138,32 @@ def test_callback_creates_session_cookie_and_redirects(auth, factory):
     assert callback_resp.cookies["newton_state"]["max-age"] == 0
 
 
+def test_callback_unauthenticated_assertion_returns_401_no_session(auth, factory):
+    middleware = _middleware(auth)
+
+    login_req = factory.get("/newton/login", {"next": "/dashboard"})
+    login_resp = middleware(login_req)
+    state_cookie_value = login_resp.cookies["newton_state"].value
+    state_param = parse_qs(urlparse(login_resp["Location"]).query)["state"][0]
+
+    # authenticated=false assertion carries no uid / platform token (no account)
+    identity = build_callback_assertion(authenticated=False, sub="", platform_token="")
+
+    callback_req = factory.get(
+        "/newton/callback",
+        {"state": state_param, "identity": identity},
+    )
+    callback_req.COOKIES = {"newton_state": state_cookie_value}
+
+    callback_resp = middleware(callback_req)
+
+    assert callback_resp.status_code == 401
+    assert b"account_not_found" in callback_resp.content
+    # no session established; state cookie cleared
+    assert "newton_session" not in callback_resp.cookies
+    assert callback_resp.cookies["newton_state"]["max-age"] == 0
+
+
 def test_callback_rejects_state_mismatch(auth, factory):
     middleware = _middleware(auth)
 

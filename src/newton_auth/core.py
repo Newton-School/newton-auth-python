@@ -130,6 +130,18 @@ class NewtonAuth:
         except InvalidCallbackAssertionError:
             self._delete_cookie(response, self.config.state_cookie_name)
             raise
+        if not assertion.get("authenticated", True):
+            # Login completed but there is no authenticated user (e.g. no Newton
+            # account). Establish no session; report the user as unauthenticated.
+            self._delete_cookie(response, self.config.state_cookie_name)
+            return CallbackResult(
+                redirect_uri=state_data["redirect_uri"],
+                user=None,
+                client_cache_ttl_seconds=int(assertion.get("client_cache_ttl_seconds", 0)),
+                session_ttl_seconds=int(assertion.get("session_ttl_seconds", 0)),
+                authenticated=False,
+            )
+
         if not assertion.get("sub") or not assertion.get("platform_token"):
             self._delete_cookie(response, self.config.state_cookie_name)
             raise InvalidCallbackAssertionError("assertion missing required fields")

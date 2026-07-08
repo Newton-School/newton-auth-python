@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -28,6 +29,9 @@ class RedirectInstruction:
 @dataclass
 class CallbackResult:
     redirect_uri: str
-    user: NewtonUser
+    user: Optional[NewtonUser]
     client_cache_ttl_seconds: int
     session_ttl_seconds: int
+    # False when the login completed but the user is not authenticated
+    # (e.g. no Newton account); user is None in that case.
+    authenticated: bool = True
