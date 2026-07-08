@@ -73,6 +73,10 @@ class NewtonAuthMiddleware(BaseHTTPMiddleware):
             error_response = PlainTextResponse("invalid auth callback", status_code=400)
             _copy_headers_and_cookies(response, error_response)
             return error_response
+        if not result.authenticated:
+            unauthenticated_response = PlainTextResponse("account_not_found", status_code=401)
+            _copy_headers_and_cookies(response, unauthenticated_response)
+            return unauthenticated_response
         response.headers["location"] = result.redirect_uri
         request.state.newton_user = result.user
         return response

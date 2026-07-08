@@ -246,6 +246,10 @@ async def protected_route(
 
 The middleware only handles `/newton/login` and `/newton/callback`. Route protection is controlled by `require_newton_auth(...)`.
 
+## Unauthenticated callbacks (no Newton account)
+
+If a user completes Google login but has no Newton account, newton-api returns a signed `authenticated=false` assertion. The SDK establishes no session; both the Django and FastAPI middlewares respond `401 account_not_found` (clearing the state cookie) at the callback path instead of the generic `invalid auth callback` 400. `handle_callback` surfaces this as `CallbackResult.authenticated is False` with `user=None`.
+
 ## Versioning And Releases
 
 This repository uses semantic versioning.
