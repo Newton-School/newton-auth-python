@@ -4,7 +4,7 @@
 
 `newton-auth-python` is a backend-only authentication SDK for Newton School hosted applications.
 
-It integrates application backends with `auth.newtonschool.co` / `newton-api` and handles:
+It integrates application backends with `my.newtonschool.co` / `newton-api` and handles:
 
 - redirecting unauthenticated users to Newton auth
 - validating the encrypted callback assertion
@@ -55,7 +55,7 @@ After decrypting the `identity` query param, the SDK should expect:
 {
   "sub": "usr_abc123",
   "aud": "app_client_id",
-  "iss": "https://auth.newtonschool.co",
+  "iss": "https://my.newtonschool.co",
   "authenticated": true,
   "authorized": true,
   "client_cache_ttl_seconds": 60,
@@ -201,7 +201,7 @@ auth = NewtonAuth(
     client_id="...",
     client_secret="...",
     callback_secret="...",
-    newton_api_base="https://auth.newtonschool.co/api/v1",
+    newton_api_base="https://my.newtonschool.co/api/v1",
     callback_path="/newton/callback",
     cache_max_mb=1,
 )
